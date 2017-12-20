@@ -9,13 +9,11 @@ Darwin*)
 esac
 export SED_EXT
 
-SCRIPTS="$(dirname "$(type -p verbose.sh)")"
-
-. "${SCRIPTS}/verbose.sh"
-
 BIN="$(cd "$(dirname "$0")" ; pwd)"
 PROJECT="$(dirname "${BIN}")"
 DATA="${PROJECT}/data"
+
+. "${BIN}/verbose.sh"
 
 sed -e 's/^---$/|/' "${DATA}/accounts-local.json" \
     | tr '|\012' '\012 ' \

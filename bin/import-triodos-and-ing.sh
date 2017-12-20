@@ -9,9 +9,9 @@ Darwin*)
 esac
 export SED_EXT
 
-SCRIPTS="$(dirname "$(type -p verbose.sh)")"
+BIN="$(cd "$(dirname "$0")" ; pwd)"
 
-. "${SCRIPTS}/verbose.sh"
+. "${BIN}/verbose.sh"
 
 DRY_RUN='false'
 if [ ".$1" = '.--dry-run' ]
@@ -54,7 +54,7 @@ function format-record() {
             -e "s/^([^${TAB}]*${TAB})0([0-9]${TAB})/\\1\\2/" \
             -e "s/(${MARK} \"debetCredit\": \"([^${TAB}]*)${TAB}([^${TAB}]*)${TAB})/\\1\\2 \\3${TAB}/" \
             -e "s/${TAB}/\",${MARK} \"cents\": /" \
-            -e "s/^([^${TAB}]*${TAB})Af /\\1-/" \
+            -e "s/^([^${TAB}]*${TAB})(Af|Deb[ie]t) /\\1-/" \
             -e "s/^([^${TAB}]*${TAB})[^${TAB}]* /\\1/" \
             -e "s/${TAB}/,${MARK} \"signedCents\": /" \
             -e "s/${TAB}/,${MARK} \"kind\": \"/" \
