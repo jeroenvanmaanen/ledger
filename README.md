@@ -31,7 +31,7 @@ All three components (MongoDB, REST API, and Nginx) run in separate Docker conta
 ## Setup
 
 1. Clone the repository
-2. Run: bin/create-local-settings.sh
-3. Edit data/*-local.*
-4. Run: npm run build
-5. Run: bin/docker-run.sh
+2. Run: `bin/create-local-settings.sh`
+3. Edit `data/*-local.*`
+4. Run: `npm run build`
+5. Run: `bin/docker-run.sh`
