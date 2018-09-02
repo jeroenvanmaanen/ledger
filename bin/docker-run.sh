@@ -54,7 +54,7 @@ docker run \
     --mount "type=volume,src=${MONGO_VOLUME},dst=/data/db" \
     "${EXPOSE_ARGS[@]}" \
     --name "${MONGO_CONTAINER}" \
-    mongo \
+    mongo:3.4 \
     mongod --rest --httpinterface
 
 REST_CONTAINER="${NAME}_rest"
