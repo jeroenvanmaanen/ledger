@@ -15,3 +15,7 @@ td {
 .key_signedCents {
     text-align: right;
 }
+
+.hidden {
+    display: none;
+}
