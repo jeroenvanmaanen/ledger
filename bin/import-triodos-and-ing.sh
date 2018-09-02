@@ -37,6 +37,16 @@ MARK="$(echo -en '\001')"
 
 PREV_DAY=''
 
+function pad-record() {
+    local RECORD="$1"
+    local COUNT="$2"
+    while [ "$(echo "${RECORD}${TAB}" | tr -dc '\011' | wc -c)" -lt "${COUNT}" ]
+    do
+        RECORD="${RECORD}${TAB}"
+    done
+    echo "${RECORD}"
+}
+
 function format-record() {
     local LINE="$1"
     trace "LINE=[${LINE}]"
@@ -75,7 +85,8 @@ function insert-record() {
     else
         NUM=$[$NUM+1]
     fi
-    local JSON="$(format-record "$1${TAB}${NUM}")"
+    local RECORD="$(pad-record "$1" 9)"
+    local JSON="$(format-record "${RECORD}${TAB}${NUM}")"
     if "${DRY_RUN}"
     then
         log "JSON=[${JSON}]"
