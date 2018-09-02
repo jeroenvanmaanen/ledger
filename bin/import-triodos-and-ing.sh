@@ -35,6 +35,8 @@ fi
 TAB="$(echo -en '\011')"
 MARK="$(echo -en '\001')"
 
+PREV_DAY=''
+
 function format-record() {
     local LINE="$1"
     trace "LINE=[${LINE}]"
@@ -93,11 +95,11 @@ function insert-record() {
             LAST_DAY="${DATE}"
             STATE="{ \"firstDay\": \"${FIRST_DAY}\", \"lastDay\": \"${LAST_DAY}\" }"
             log "STATE=[${STATE}]"
-            "${DRY_RUN}" || curl -sS -d "${STATE}" -X PUT -H 'Content-Type: application/json' -H 'Accept: application/json' 'http://localhost:3000/api/state/feedbeef'
+            "${DRY_RUN}" || curl -sS -d "${STATE}" -X PUT -H 'Content-Type: application/json' -H 'Accept: application/json' 'http://ledger_rest:3000/api/state/feedbeef'
             echo
         fi
 
-        "${DRY_RUN}" || curl -sS -d "${JSON}" -X POST -H 'Content-Type: application/json' -H 'Accept: application/json' 'http://localhost:3000/api/transactions'
+        "${DRY_RUN}" || curl -sS -d "${JSON}" -X POST -H 'Content-Type: application/json' -H 'Accept: application/json' 'http://ledger_rest:3000/api/transactions'
         echo
     else
         log "SKIP: [${DATE}]"
@@ -106,7 +108,7 @@ function insert-record() {
     PREV_DAY="${DATE}"
 }
 
-STATE="$(curl -sS -H 'Accept: application/json' 'http://localhost:3000/api/state')"
+STATE="$(curl -sS -H 'Accept: application/json' 'http://ledger_rest:3000/api/state')"
 FIRST_DAY=''
 LAST_DAY=''
 if [ ".${STATE}" != '.[]' ]

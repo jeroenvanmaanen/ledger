@@ -39,6 +39,6 @@ sed -e 's/^---$/|/' "${DATA}/accounts-local.json" \
                                 fi
                             done
                 fi
-                curl -sS -X POST -H 'Content-Type: application/json' -d "${LINE}" "http://localhost:8888/api/accounts/"
+                curl -sS -X POST -H 'Content-Type: application/json' -d "${LINE}" "http://localhost:8888/api/accounts/" | sed
             fi
         done
