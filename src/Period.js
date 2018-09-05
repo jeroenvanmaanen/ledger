@@ -5,7 +5,7 @@ class Period extends Component {
   constructor(props) {
     super(props);
     const initialPrefix = props.prefix ? props.prefix : '';
-    this.state = { label: props.label, prefix: initialPrefix, transactions: [] };
+    this.state = { label: props.label, prefix: initialPrefix, transactions: [], compoundApi: props.compoundApi };
     this.handlePrefixChange = this.handlePrefixChange.bind(this);
     this.refreshAccounts = this.refreshAccounts.bind(this);
     this.refreshTransactions = this.refreshTransactions.bind(this);
@@ -25,6 +25,7 @@ class Period extends Component {
         </form>
         <table>
           <colgroup>
+            <col width="45px"/>
             <col width="90px"/>
             <col width="1*"/>
             <col width="60px"/>
@@ -37,6 +38,7 @@ class Period extends Component {
           </colgroup>
           <thead>
             <tr>
+              <th>Add</th>
               <th>Datum</th>
               <th>Naam / Omschrijving</th>
               <th>Pot</th>
@@ -90,23 +92,37 @@ class Period extends Component {
   }
 
   formatTransaction(record) {
+    // console.log('Record:', record);
     const self = this;
-    const keys = [ 'date', 'name', 'jar', 'account', 'contraAccount', 'code', 'signedCents', 'kind', 'remarks' ]
+    const keys = [ 'add', 'date', 'name', 'jar', 'account', 'contraAccount', 'code', 'signedCents', 'kind', 'remarks' ]
     const cells = keys
       .map(
         (key) => {
           var value;
-          if (!record.hasOwnProperty(key)) {
+          var unformatted = undefined;
+          var jar = undefined;
+          if (key === 'add') {
+            value = '+';
+          } else if (!record.hasOwnProperty(key)) {
             value = '???';
           } else if (key === 'signedCents') {
-            value = self.formatValue(record[key])
+            unformatted = record[key]
+            value = self.formatValue(unformatted)
           } else if (key === 'account' || key === 'contraAccount') {
-            value = self.formatAccount(record[key])
+            unformatted = record[key]
+            jar = self.accountJar(unformatted)
+            value = self.formatAccount(unformatted)
           } else {
             value = '' + record[key];
           }
           var cssClass = 'key_'+key;
-          return <td class={cssClass}>{value}</td>;
+          if (unformatted === undefined) {
+            return <td class={cssClass} onClick={self.state.compoundApi.changeFocus}>{value}</td>;
+          } else if (jar === undefined) {
+            return <td class={cssClass} onClick={self.state.compoundApi.changeFocus} unformatted={'' + unformatted}>{value}</td>;
+          } else {
+            return <td class={cssClass} onClick={self.state.compoundApi.changeFocus} unformatted={'' + unformatted} jar={jar}>{value}</td>;
+          }
         }
       )
     ;
@@ -116,7 +132,10 @@ class Period extends Component {
     if (d1 * d2 > 0 && record.signedCents >= 0) {
       cssClass = cssClass + ' hidden';
     }
-    return <tr class={cssClass}>{cells}</tr>;
+    if (this.state.compoundApi.isMember(record.id)) {
+      cssClass = cssClass + ' compoundMember';
+    }
+    return <tr class={cssClass} data-id={record.id}>{cells}</tr>;
   }
 
   getDepth(account) {
@@ -146,6 +165,15 @@ class Period extends Component {
       return accounts[value].label;
     } else {
       return value;
+    }
+  }
+
+  accountJar(value) {
+    var accounts = this.state.accounts;
+    if (accounts.hasOwnProperty(value)) {
+      return accounts[value].key;
+    } else {
+      return '*';
     }
   }
 

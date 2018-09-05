@@ -1,6 +1,6 @@
 import React, { Component } from 'react';
 import './App.css';
-import Period from './Period';
+import Compound from './Compound';
 import UUID from 'uuid-js';
 
 class App extends Component {
@@ -11,8 +11,7 @@ class App extends Component {
     console.log('uuid', uuid);
     return (
       <div className="App">
-        <Period label="Period 1"/>
-        <Period label="Period 2"/>
+        <Compound />
       </div>
     );
   }

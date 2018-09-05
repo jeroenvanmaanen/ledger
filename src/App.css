@@ -12,6 +12,10 @@ td {
     vertical-align: text-top;
 }
 
+.compoundMember {
+    background: yellow;
+}
+
 .key_signedCents {
     text-align: right;
 }
