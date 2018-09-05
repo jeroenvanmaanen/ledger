@@ -183,11 +183,12 @@ class Period extends Component {
     if (accounts && accounts.hasOwnProperty(value)) {
       return accounts[value].key;
     } else {
-      return '?';
-    }
-    value = record.contraAccount;
-    if (record.signedCents >= 0 && accounts && accounts.hasOwnProperty(value)) {
-      return accounts[value].key;
+      value = record.contraAccount;
+      if (accounts && accounts.hasOwnProperty(value)) {
+        return accounts[value].key;
+      } else {
+        return '*';
+      }
     }
   }
 }

@@ -22,6 +22,10 @@ td {
     padding: 5px;
 }
 
+.compoundInput {
+    width: 393px;
+}
+
 .compoundMember {
     background: yellow;
 }

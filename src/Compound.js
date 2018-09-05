@@ -6,8 +6,9 @@ class Compound extends Component {
   constructor(props) {
     super(props);
     this.handleFocusChange = this.handleFocusChange.bind(this);
+    this.handleLabelChange = this.handleLabelChange.bind(this);
     this.isMember = this.isMember.bind(this);
-    this.state = { transactions: [], balance: {}, jars: '' };
+    this.state = { label: '', transactions: [], balance: {}, jars: '' };
   }
 
   render() {
@@ -20,6 +21,8 @@ class Compound extends Component {
         <div className="CompoundContainer">
             <div className="Compound">
                 <h2>Compound [{this.state.jars}]</h2>
+                <p>Label:</p>
+                <p><input type="text" name="label" className="compoundInput" value={this.state.label} onChange={this.handleLabelChange} /></p>
                 <p>Balance:</p>
                 <ul>
                     {Object.keys(this.state.balance).map((jar) => {
@@ -36,6 +39,12 @@ class Compound extends Component {
             <Period label="Period" compoundApi={compoundApi} />
         </div>
     );
+  }
+
+  handleLabelChange(event) {
+    const target = event.target;
+    this.setState({ label: target.value });
+    this.saveState({ label: target.value });
   }
 
   handleFocusChange(event) {
@@ -76,11 +85,11 @@ class Compound extends Component {
             transactions = [ transaction ];
         }
         this.setState({ transactions: transactions });
-        this.updateBalance(transactions);
+        this.updateBalance(transactions, toggle, transactionId);
     }
   }
 
-  updateBalance(transactions) {
+  updateBalance(transactions, toggle, transactionId) {
     var newBalance = {}
     transactions.forEach(transaction => {
         if (newBalance[transaction.jar] === undefined) {
@@ -104,6 +113,9 @@ class Compound extends Component {
         jars.push(key);
     });
     this.setState({ jars: jars.join() });
+    if (toggle) {
+        this.saveState({ transactions: transactions, balance: newBalance }, transactionId)
+    }
   }
 
   getField(node, key) {
@@ -146,6 +158,18 @@ class Compound extends Component {
     const result = (' ' + nodeClass + ' ').match(' ' + className + ' ');
     console.log('Has class:', nodeClass, className, result);
     return result;
+  }
+
+  saveState(update, transactionId) {
+    // console.log('Compound: save state:', this.state, update);
+    var newState = {};
+    Object.keys(this.state).forEach((key) => {
+        newState[key] = this.state[key];
+    });
+    Object.keys(update).forEach((key) => {
+        newState[key] = update[key];
+    });
+    console.log('Compound: save new state:', newState, transactionId);
   }
 }
 
