@@ -21,6 +21,13 @@ then
     shift
 fi
 
+LEDGER_REST='localhost:8888'
+if [ ".$1" = '.-r' ]
+then
+    LEDGER_REST="$2"
+    shift 2
+fi
+
 function usage() {
   echo "Usage: $(basename "$0") <data-file>"
   exit 1
@@ -72,6 +79,7 @@ function format-record() {
             -e "s/${TAB}/,${MARK} \"kind\": \"/" \
             -e "s/${TAB}/\",${MARK} \"remarks\": \"/" \
             -e "s/${TAB}/\",${MARK} \"number\": /" \
+            -e "s/^(.*)(${MARK} \"date\": \")([^\",]*)(\",.*${MARK} \"number\": )(.*)$/\1\2\3\4\5,${MARK} \"_id\": \"\3#\5\"/" \
             -e "s/\$/${MARK}}/" \
         | tr "${MARK}" '\012'
 }
@@ -106,11 +114,11 @@ function insert-record() {
             LAST_DAY="${DATE}"
             STATE="{ \"firstDay\": \"${FIRST_DAY}\", \"lastDay\": \"${LAST_DAY}\" }"
             log "STATE=[${STATE}]"
-            "${DRY_RUN}" || curl -sS -d "${STATE}" -X PUT -H 'Content-Type: application/json' -H 'Accept: application/json' 'http://ledger_rest:3000/api/state/feedbeef'
+            "${DRY_RUN}" || curl -sS -d "${STATE}" -X PUT -H 'Content-Type: application/json' -H 'Accept: application/json' "http://${LEDGER_REST}/api/state/feedbeef"
             echo
         fi
 
-        "${DRY_RUN}" || curl -sS -d "${JSON}" -X POST -H 'Content-Type: application/json' -H 'Accept: application/json' 'http://ledger_rest:3000/api/transactions'
+        "${DRY_RUN}" || curl -sS -d "${JSON}" -X POST -H 'Content-Type: application/json' -H 'Accept: application/json' "http://${LEDGER_REST}/api/transactions"
         echo
     else
         log "SKIP: [${DATE}]"
@@ -119,7 +127,7 @@ function insert-record() {
     PREV_DAY="${DATE}"
 }
 
-STATE="$(curl -sS -H 'Accept: application/json' 'http://ledger_rest:3000/api/state')"
+STATE="$(curl -sS -H 'Accept: application/json' "http://${LEDGER_REST}/api/state")"
 FIRST_DAY=''
 LAST_DAY=''
 if [ ".${STATE}" != '.[]' ]
