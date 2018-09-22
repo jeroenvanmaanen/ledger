@@ -69,41 +69,46 @@ class Compound extends Component {
     const target = transactionElement.target;
     const toggle = transactionElement.toggle;
     console.log('Handle focus change: target:', target, target.tagName, target.className, target.parentNode);
-    var transactions;
     if (this.hasClass(target, 'transaction') && target.getAttribute('data-id')) {
-        const transactionId = target.getAttribute('data-id');
-        const date = this.getField(target, 'date');
-        const amount = this.getField(target, 'signedCents');
-        const jar = this.getJar(target, 'account');
-        const contraJar = this.getJar(target, 'contraAccount');
-        const transaction = {
-            _id: transactionId,
-            date: date,
-            amount: amount,
-            jar: jar,
-            contraJar: contraJar
-        };
-        var newState = {};
-        if(toggle) {
-            console.log('Toggle');
-            transactions = this.state.transactions;
-            if (transactions.some(t => t._id === transactionId)) {
-                console.log('Remove');
-                transactions = transactions.filter(t => t._id !== transactionId);
-            } else {
-                console.log('Add');
-                transactions.push(transaction);
-            }
-        } else {
-            console.log('Singleton');
-            transactions = [ transaction ];
-            newState._id = '';
-            newState.label = '';
-        }
-        newState.transactions = transactions;
-        this.setState(newState);
-        this.updateBalance(newState, toggle, transactionId);
+        this.updateState(target, toggle);
     }
+  }
+
+  async updateState(target, toggle) {
+    const transactionId = target.getAttribute('data-id');
+    const date = this.getField(target, 'date');
+    const amount = this.getField(target, 'signedCents');
+    const jar = this.getJar(target, 'account');
+    const contraJar = this.getJar(target, 'contraAccount');
+    const transaction = {
+        _id: transactionId,
+        date: date,
+        amount: amount,
+        jar: jar,
+        contraJar: contraJar
+    };
+    var newState = {};
+    var transactions;
+    if(toggle) {
+        console.log('Toggle');
+        transactions = this.state.transactions;
+        if (transactions.some(t => t._id === transactionId)) {
+            console.log('Remove');
+            transactions = transactions.filter(t => t._id !== transactionId);
+        } else {
+            console.log('Add');
+            transactions.push(transaction);
+        }
+    } else {
+        console.log('Singleton');
+        transactions = [ transaction ];
+        newState._id = '';
+        const label = await this.getLabel(transactionId);
+        newState.label = label ? label.label : '';
+    }
+    newState.transactions = transactions;
+    this.setState(newState);
+    this.updateBalance(newState, toggle, transactionId);
   }
 
   updateBalance(newState, toggle, transactionId) {
