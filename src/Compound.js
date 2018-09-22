@@ -1,5 +1,6 @@
 import React, { Component } from 'react';
 import REST from './rest-client';
+import UUID from 'uuid-js';
 import Period from './Period';
 
 class Compound extends Component {
@@ -8,7 +9,7 @@ class Compound extends Component {
     this.handleFocusChange = this.handleFocusChange.bind(this);
     this.handleLabelChange = this.handleLabelChange.bind(this);
     this.isMember = this.isMember.bind(this);
-    this.state = { label: '', transactions: [], balance: {}, jars: '' };
+    this.state = { _id: '', label: '', transactions: [], balance: {}, jars: '' };
   }
 
   render() {
@@ -47,7 +48,7 @@ class Compound extends Component {
     this.saveState({ label: target.value });
   }
 
-  handleFocusChange(event) {
+  findTransactionElement(event) {
     var target = event.target;
     var toggle = false;
     while (!this.hasClass(target, 'transaction') && target.parentNode && target.tagName !== 'TABLE') {
@@ -57,19 +58,32 @@ class Compound extends Component {
         }
         target = target.parentNode;
     }
+    return {
+      target: target,
+      toggle: toggle
+    }
+  }
+
+  handleFocusChange(event) {
+    const transactionElement = this.findTransactionElement(event);
+    const target = transactionElement.target;
+    const toggle = transactionElement.toggle;
     console.log('Handle focus change: target:', target, target.tagName, target.className, target.parentNode);
     var transactions;
     if (this.hasClass(target, 'transaction') && target.getAttribute('data-id')) {
-        var transactionId = target.getAttribute('data-id');
-        var amount = this.getField(target, 'signedCents');
-        var jar = this.getJar(target, 'account');
-        var contraJar = this.getJar(target, 'contraAccount');
-        var transaction = {
+        const transactionId = target.getAttribute('data-id');
+        const date = this.getField(target, 'date');
+        const amount = this.getField(target, 'signedCents');
+        const jar = this.getJar(target, 'account');
+        const contraJar = this.getJar(target, 'contraAccount');
+        const transaction = {
             _id: transactionId,
+            date: date,
             amount: amount,
             jar: jar,
             contraJar: contraJar
         };
+        var newState = {};
         if(toggle) {
             console.log('Toggle');
             transactions = this.state.transactions;
@@ -83,15 +97,18 @@ class Compound extends Component {
         } else {
             console.log('Singleton');
             transactions = [ transaction ];
+            newState._id = '';
+            newState.label = '';
         }
-        this.setState({ transactions: transactions });
-        this.updateBalance(transactions, toggle, transactionId);
+        newState.transactions = transactions;
+        this.setState(newState);
+        this.updateBalance(newState, toggle, transactionId);
     }
   }
 
-  updateBalance(transactions, toggle, transactionId) {
+  updateBalance(newState, toggle, transactionId) {
     var newBalance = {}
-    transactions.forEach(transaction => {
+    newState.transactions.forEach(transaction => {
         if (newBalance[transaction.jar] === undefined) {
             newBalance[transaction.jar] = 0;
         }
@@ -101,6 +118,7 @@ class Compound extends Component {
         }
         newBalance[transaction.contraJar] -= Number(transaction.amount);
     });
+    newState.balance = newBalance;
     this.setState({ balance: newBalance });
     var jars = [];
     Object.keys(newBalance).forEach((key) => {
@@ -112,9 +130,10 @@ class Compound extends Component {
         }
         jars.push(key);
     });
+    newState.jars = jars;
     this.setState({ jars: jars.join() });
     if (toggle) {
-        this.saveState({ transactions: transactions, balance: newBalance }, transactionId)
+        this.saveState(newState, transactionId)
     }
   }
 
@@ -155,7 +174,7 @@ class Compound extends Component {
 
   hasClass(node, className) {
     const nodeClass = node.className;
-    const result = (' ' + nodeClass + ' ').match(' ' + className + ' ');
+    const result = !!(' ' + nodeClass + ' ').match(' ' + className + ' ');
     console.log('Has class:', nodeClass, className, result);
     return result;
   }
@@ -169,7 +188,77 @@ class Compound extends Component {
     Object.keys(update).forEach((key) => {
         newState[key] = update[key];
     });
-    console.log('Compound: save new state:', newState, transactionId);
+    const isCompound = newState.transactions.length > 1;
+    if (isCompound) {
+        console.log('Compound: update new state:', newState);
+        if (transactionId) {
+            if (this.contains(newState, transactionId)) {
+                console.log('Compound: link transaction:', transactionId);
+            } else {
+                console.log('Compound: unlink transaction:', transactionId);
+            }
+        }
+    } else {
+        if (transactionId) {
+            if (this.contains(newState, transactionId)) {
+                console.log('Compound: load:', transactionId);
+            } else {
+                console.log('Compound: delete:', transactionId);
+            }
+        } else if (newState.transactions.length === 1) {
+            console.log('Save label:', newState.label, newState.transactions);
+            this.saveLabel(newState, newState.transactions[0]._id);
+        }
+    }
+  }
+
+  contains(state, transactionId) {
+    return state.transactions.some((t) => {
+      return t._id === transactionId;
+    });
+  }
+
+  async getLabel(transactionId) {
+    const result = await REST({
+      path: '/api/label?transactionId="' + transactionId + '"'
+    });
+    console.log('Get label: result', result);
+    const entities = result.entity
+    return entities.length < 1 ? undefined : entities[0];
+  }
+
+  async saveLabel(newState, transactionId) {
+    console.log('Save label: transaction ID:', transactionId);
+    const labelId = await this.getLabelId(transactionId);
+    var newLabel = {
+      transactionId: transactionId
+    };
+    if (newState.transactions.length <= 1) {
+      newState._id = '';
+    } else if (!newState._id) {
+      newState._id = UUID.create();
+    }
+    if (newState.transactions.includes(transactionId)) {
+      newLabel.compoundId = newState._id;
+    } else {
+      newLabel.compoundId = '';
+    }
+    newLabel.label = newState.label;
+    console.log("New label:", newLabel);
+    var saved = await REST({
+      method: 'PUT',
+      path: '/api/label/' + labelId,
+      headers: {
+        'Content-Type': 'application/json'
+      },
+      entity: newLabel
+    });
+    console.log('Saved:', saved);
+  }
+
+  async getLabelId(transactionId) {
+    const label = await this.getLabel(transactionId);
+    return label ? label.id : transactionId;
   }
 }
 

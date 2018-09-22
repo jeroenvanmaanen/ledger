@@ -79,7 +79,7 @@ function format-record() {
             -e "s/${TAB}/,${MARK} \"kind\": \"/" \
             -e "s/${TAB}/\",${MARK} \"remarks\": \"/" \
             -e "s/${TAB}/\",${MARK} \"number\": /" \
-            -e "s/^(.*)(${MARK} \"date\": \")([^\",]*)(\",.*${MARK} \"number\": )(.*)$/\1\2\3\4\5,${MARK} \"_id\": \"\3#\5\"/" \
+            -e "s/^(.*)(${MARK} \"date\": \")([^\",]*)(\",.*${MARK} \"number\": )(.*)$/\1\2\3\4\5,${MARK} \"_id\": \"\3_\5\"/" \
             -e "s/\$/${MARK}}/" \
         | tr "${MARK}" '\012'
 }
