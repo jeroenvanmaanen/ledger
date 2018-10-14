@@ -8,6 +8,7 @@ class Compound extends Component {
     super(props);
     this.handleFocusChange = this.handleFocusChange.bind(this);
     this.handleLabelChange = this.handleLabelChange.bind(this);
+    this.intendedJarChange = this.intendedJarChange.bind(this);
     this.getAccounts = this.getAccounts.bind(this);
     this.isMember = this.isMember.bind(this);
     this.state = { _id: '', label: '', transactions: [], balance: {}, jars: '', intendedJar: '*', compoundId: undefined, staticAccounts: {} };
@@ -25,6 +26,26 @@ class Compound extends Component {
         <div className="CompoundContainer">
             <div className="Compound">
                 <h2>Compound [{this.state.jars}]</h2>
+                <p>Intended jar:
+                  <select onChange={this.intendedJarChange}>
+                    {Object.keys(this.state.staticAccounts)
+                      .map(
+                        (accountNr) => {
+                          const account = this.state.staticAccounts[accountNr];
+                          if (account.key === this.state.intendedJar) {
+                            return (<option value={account.key} selected='selected'>{account.label}</option>)
+                          } else {
+                            return (<option value={account.key}>{account.label}</option>)
+                          }
+                        }
+                      )
+                    }
+                    {this.state.intendedJar === '*'
+                      ? (<option value='*' selected='selected'>-- any --</option>)
+                      : (<option value='*'>-- any --</option>)
+                    }
+                  </select>
+                </p>
                 <p>Label:</p>
                 <p><input type="text" name="label" className="compoundInput" value={this.state.label} onChange={this.handleLabelChange} /></p>
                 <p>Balance:</p>
@@ -68,6 +89,12 @@ class Compound extends Component {
     const target = event.target;
     this.setState({ label: target.value });
     this.saveState({ label: target.value });
+  }
+
+  intendedJarChange(event) {
+    const target = event.target;
+    this.setState({ intendedJar: target.value });
+    this.saveState({ intendedJar: target.value });
   }
 
   findTransactionElement(event) {
@@ -145,6 +172,7 @@ class Compound extends Component {
         const label = await this.getLabel(transactionRef);
         console.log("Label:", label);
         stateChange.label = label ? label.label : '';
+        stateChange.intendedJar = '*';
         if (label && label.compoundId) {
             const result = await REST('/api/compound/' + label.compoundId);
             const compound = result.entity;
@@ -153,6 +181,7 @@ class Compound extends Component {
                 stateChange.compoundId = label.compoundId;
                 stateChange.transactions = compound.transactions;
                 stateChange.label = compound.label;
+                stateChange.intendedJar = compound.intendedJar;
                 transactions = stateChange.transactions;
             }
         }
@@ -256,6 +285,11 @@ class Compound extends Component {
             }
         }
         this.saveLabel(newState);
+        if (update.intendedJar || update.label) {
+            newState.transactions.forEach((transaction) => {
+                this.saveTransaction(newState, this.getRef(transaction));
+            });
+        }
     } else {
         if (transactionRef) {
             if (this.contains(newState, transactionRef)) {
@@ -284,33 +318,52 @@ class Compound extends Component {
     return entities.length < 1 ? undefined : entities[0];
   }
 
+  async saveTransaction(newState, transactionRef) {
+    const compoundId = newState.compoundId || this.state.compoundId;
+    const labelId = await this.getLabelId(transactionRef);
+    var newLabel = {
+      transactionId: transactionRef._id,
+      transactionKey: transactionRef.key
+    };
+    newLabel.compoundId = compoundId;
+    newLabel.label = newState.label;
+    newLabel.intendedJar = newState.intendedJar;
+    console.log("New label:", newLabel);
+    var saved = await REST({
+      method: 'PUT',
+      path: '/api/label/' + labelId,
+      headers: {
+        'Content-Type': 'application/json'
+      },
+      entity: newLabel
+    });
+    console.log('Saved label:', saved);
+    var patch = [
+      { op: 'replace', path: 'label', value: newState.label },
+      { op: 'replace', path: 'intendedJar', value: newState.intendedJar }
+    ];
+    await REST({
+      method: 'PATCH',
+      path: '/api/transactions/' + transactionRef._id,
+      headers: {
+        'Content-Type': 'application/json'
+      },
+      entity: patch
+    });
+  }
+
   async saveLabel(newState, transactionRef) {
     console.log('Save label:', newState.label, newState.transactions, transactionRef);
     const compoundId = newState.compoundId || this.state.compoundId;
     if (transactionRef) {
-        const labelId = await this.getLabelId(transactionRef);
-        var newLabel = {
-          transactionId: transactionRef._id,
-          transactionKey: transactionRef.key
-        };
-        newLabel.compoundId = compoundId;
-        newLabel.label = newState.label;
-        console.log("New label:", newLabel);
-        var saved = await REST({
-          method: 'PUT',
-          path: '/api/label/' + labelId,
-          headers: {
-            'Content-Type': 'application/json'
-          },
-          entity: newLabel
-        });
-        console.log('Saved label:', saved);
+      this.saveTransaction(newState, transactionRef);
     }
     if (compoundId) {
       var compound = {};
       compound.transactions = this.summarize(newState.transactions);
       compound.balance = newState.balance;
       compound.label = newState.label;
+      compound.intendedJar = newState.intendedJar;
       const result = await REST({
         method: 'PUT',
         path: '/api/compound/' + compoundId,
@@ -323,6 +376,12 @@ class Compound extends Component {
     }
   }
 
+  addToPatch(patch, key, value) {
+    if (value) {
+      patch[key] = value;
+    }
+  }
+
   getRef(transaction) {
     return {
       _id: transaction._id,
@@ -331,6 +390,9 @@ class Compound extends Component {
   }
 
   summarize(transactions) {
+    if (!transactions) {
+       return;
+    }
     var transactionSummaries = []
     transactions.forEach(transaction => {
       transactionSummaries.push({
