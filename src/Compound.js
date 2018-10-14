@@ -76,27 +76,33 @@ class Compound extends Component {
 
   async updateState(target, toggle) {
     const transactionId = target.getAttribute('data-id');
+    const transactionKey = target.getAttribute('data-key');
     const date = this.getField(target, 'date');
     const amount = this.getField(target, 'signedCents');
     const jar = this.getJar(target, 'account');
     const contraJar = this.getJar(target, 'contraAccount');
     const transaction = {
         _id: transactionId,
+        key: transactionKey,
         date: date,
         amount: amount,
         jar: jar,
         contraJar: contraJar
+    };
+    const transactionRef = {
+        _id: transactionId,
+        key: transactionKey
     };
     var stateChange = {};
     var transactions;
     if(toggle) {
         console.log('Toggle');
         transactions = this.state.transactions;
-        if (transactions.some(t => t._id === transactionId)) {
+        if (transactions.some(t => t.key === transactionKey)) {
             console.log('Remove');
-            transactions = transactions.filter(t => t._id !== transactionId);
+            transactions = transactions.filter(t => t.key !== transactionKey);
             if (transactions.length === 1 && this.state.compoundId) {
-                await this.deleteCompound(transactions[0]._id, this.state.compoundId);
+                await this.deleteCompound(this.getRef(transactions[0]), this.state.compoundId);
                 stateChange.compoundId = undefined;
             }
         } else {
@@ -106,7 +112,7 @@ class Compound extends Component {
               console.log('Add compound:', transactions)
               const newState = this.copyState;
               newState.transactions = transactions;
-              const compoundId = await this.insertCompound(transactions[0]._id, newState);
+              const compoundId = await this.insertCompound(this.getRef(transactions[0]), newState);
               stateChange.compoundId = compoundId;
             }
         }
@@ -114,26 +120,28 @@ class Compound extends Component {
         console.log('Singleton');
         transactions = [ transaction ];
         stateChange._id = '';
-        const label = await this.getLabel(transactionId);
+        const label = await this.getLabel(transactionRef);
         console.log("Label:", label);
         stateChange.label = label ? label.label : '';
         if (label && label.compoundId) {
             const result = await REST('/api/compound/' + label.compoundId);
             const compound = result.entity;
-            console.log('Retrieved compound transaction:', compound);
-            stateChange.compoundId = label.compoundId;
-            stateChange.transactions = compound.transactions;
-            stateChange.label = compound.label;
-            transactions = stateChange.transactions;
+            if (compound.transactions) {
+                console.log('Retrieved compound transaction:', compound);
+                stateChange.compoundId = label.compoundId;
+                stateChange.transactions = compound.transactions;
+                stateChange.label = compound.label;
+                transactions = stateChange.transactions;
+            }
         }
     }
     stateChange.transactions = transactions;
     console.log('State change:', stateChange);
     this.setState(stateChange);
-    this.updateBalance(stateChange, toggle, transactionId);
+    this.updateBalance(stateChange, toggle, transactionRef);
   }
 
-  updateBalance(newState, toggle, transactionId) {
+  updateBalance(newState, toggle, transactionRef) {
     var newBalance = {}
     newState.transactions.forEach(transaction => {
         if (newBalance[transaction.jar] === undefined) {
@@ -160,7 +168,7 @@ class Compound extends Component {
     newState.jars = jars;
     this.setState({ jars: jars.join() });
     if (toggle) {
-        this.saveState(newState, transactionId)
+        this.saveState(newState, transactionRef)
     }
   }
 
@@ -189,10 +197,11 @@ class Compound extends Component {
     return result;
   }
 
-  isMember(transactionId) {
+  isMember(transactionKey) {
     var result = false;
     this.state.transactions.forEach(transaction => {
-        if (transaction._id === transactionId) {
+        const key = transaction && transaction.key;
+        if (key === transactionKey) {
             result = true;
         }
     });
@@ -206,7 +215,7 @@ class Compound extends Component {
     return result;
   }
 
-  async saveState(update, transactionId) {
+  async saveState(update, transactionRef) {
     // console.log('Compound: save state:', this.state, update);
     var newState = this.copyState();
     Object.keys(update).forEach((key) => {
@@ -215,23 +224,23 @@ class Compound extends Component {
     const isCompound = newState.transactions.length > 1;
     if (isCompound) {
         console.log('Compound: update new state:', newState);
-        if (transactionId) {
-            if (this.contains(newState, transactionId)) {
-                console.log('Compound: link transaction:', transactionId);
-                this.linkTransaction(transactionId, newState);
+        if (transactionRef) {
+            if (this.contains(newState, transactionRef)) {
+                console.log('Compound: link transaction:', transactionRef.key);
+                this.linkTransaction(transactionRef, newState);
             } else {
-                console.log('Compound: unlink transaction:', transactionId);
-                this.unlinkTransaction(transactionId);
+                console.log('Compound: unlink transaction:', transactionRef.key);
+                this.unlinkTransaction(transactionRef);
             }
-        } else if (update.label) {
+        } else if (update.label || update.balance) {
             this.saveLabel(newState);
         }
     } else {
-        if (transactionId) {
-            if (this.contains(newState, transactionId)) {
-                console.log('Compound: load:', transactionId);
+        if (transactionRef) {
+            if (this.contains(newState, transactionRef)) {
+                console.log('Compound: load:', transactionRef.key);
             } else {
-                console.log('Compound: delete:', transactionId);
+                console.log('Compound: delete:', transactionRef.key);
             }
         } else if (newState.transactions.length === 1) {
             this.saveLabel(newState, newState.transactions[0]._id);
@@ -239,28 +248,29 @@ class Compound extends Component {
     }
   }
 
-  contains(state, transactionId) {
+  contains(state, transactionRef) {
     return state.transactions.some((t) => {
-      return t._id === transactionId;
+      return t.key === transactionRef.key;
     });
   }
 
-  async getLabel(transactionId) {
+  async getLabel(transactionRef) {
     const result = await REST({
-      path: '/api/label?transactionId="' + transactionId + '"'
+      path: '/api/label?transactionKey="' + transactionRef.key + '"'
     });
     console.log('Get label: result', result);
     const entities = result.entity
     return entities.length < 1 ? undefined : entities[0];
   }
 
-  async saveLabel(newState, transactionId) {
-    console.log('Save label:', newState.label, newState.transactions, transactionId);
+  async saveLabel(newState, transactionRef) {
+    console.log('Save label:', newState.label, newState.transactions, transactionRef);
     const compoundId = newState.compoundId || this.state.compoundId;
-    if (transactionId) {
-        const labelId = await this.getLabelId(transactionId);
+    if (transactionRef) {
+        const labelId = await this.getLabelId(transactionRef);
         var newLabel = {
-          transactionId: transactionId
+          transactionId: transactionRef._id,
+          transactionKey: transactionRef.key
         };
         newLabel.compoundId = compoundId;
         newLabel.label = newState.label;
@@ -276,12 +286,9 @@ class Compound extends Component {
         console.log('Saved label:', saved);
     }
     if (compoundId) {
-      var transactionIds = []
-      newState.transactions.forEach(transaction => {
-        transactionIds.push(transaction._id);
-      })
       var compound = {};
-      compound.transactions = newState.transactions;
+      compound.transactions = this.summarize(newState.transactions);
+      compound.balance = newState.balance;
       compound.label = newState.label;
       const result = await REST({
         method: 'PUT',
@@ -295,16 +302,39 @@ class Compound extends Component {
     }
   }
 
-  async getLabelId(transactionId) {
-    const label = await this.getLabel(transactionId);
-    console.log("Get label ID:", transactionId, label);
-    return label ? label.id : transactionId;
+  getRef(transaction) {
+    return {
+      _id: transaction._id,
+      key: transaction.key
+    };
   }
 
-  async insertCompound(transactionId, newState) {
+  summarize(transactions) {
+    var transactionSummaries = []
+    transactions.forEach(transaction => {
+      transactionSummaries.push({
+        _id: transaction._id,
+        key: transaction.key,
+        date: transaction.date,
+        jar: transaction.jar,
+        contraJar: transaction.contraJar,
+        amount: transaction.amount
+      });
+    });
+    return transactionSummaries;
+  }
+
+  async getLabelId(transactionRef) {
+    const label = await this.getLabel(transactionRef);
+    console.log("Get label ID:", transactionRef, label);
+    return label ? label.id : transactionRef._id;
+  }
+
+  async insertCompound(transactionRef, newState) {
     var compound = {};
     compound.label = newState.label;
-    compound.transactions = newState.transactions;
+    compound.transactions = this.summarize(newState.transactions);
+    compound.balance = newState.balance;
     const result = await REST({
       method: 'POST',
       path: '/api/compound',
@@ -316,16 +346,16 @@ class Compound extends Component {
     console.log("Insert compound", result);
     const compoundId = result.entity.id;
     newState.compoundId = compoundId;
-    await this.linkTransaction(transactionId, newState);
+    await this.linkTransaction(transactionRef, newState);
     this.setState({compoundId: compoundId})
     return compoundId;
   }
 
-  async deleteCompound(transactionId, compoundId) {
+  async deleteCompound(transactionRef, compoundId) {
     if (compoundId) {
         var newState = this.copyState();
         newState.compoundId = undefined;
-        this.saveLabel(newState, transactionId);
+        this.saveLabel(newState, transactionRef);
         await REST({
           method: 'DELETE',
           path: '/api/compound/' + compoundId
@@ -333,17 +363,17 @@ class Compound extends Component {
     }
   }
 
-  async linkTransaction(transactionId, newState) {
+  async linkTransaction(transactionRef, newState) {
     const state = newState || this.state;
     const compoundId = state.compoundId;
     if (!compoundId) {
       return;
     }
-    await this.saveLabel(newState, transactionId);
+    await this.saveLabel(newState, transactionRef);
   }
 
-  async unlinkTransaction(transactionId) {
-    const labelId = await this.getLabelId(transactionId);
+  async unlinkTransaction(transactionRef) {
+    const labelId = await this.getLabelId(transactionRef);
     await REST({
       method: 'DELETE',
       path: '/api/label/' + labelId,

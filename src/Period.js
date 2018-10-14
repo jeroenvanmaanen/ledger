@@ -132,10 +132,10 @@ class Period extends Component {
     if (d1 * d2 > 0 && record.signedCents >= 0) {
       cssClass = cssClass + ' hidden';
     }
-    if (this.state.compoundApi.isMember(record.id)) {
+    if (this.state.compoundApi.isMember(record.key)) {
       cssClass = cssClass + ' compoundMember';
     }
-    return <tr class={cssClass} data-id={record.id}>{cells}</tr>;
+    return <tr class={cssClass} data-id={record.id} data-key={record.key}>{cells}</tr>;
   }
 
   getDepth(account) {
