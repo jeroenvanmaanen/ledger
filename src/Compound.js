@@ -8,14 +8,17 @@ class Compound extends Component {
     super(props);
     this.handleFocusChange = this.handleFocusChange.bind(this);
     this.handleLabelChange = this.handleLabelChange.bind(this);
+    this.getAccounts = this.getAccounts.bind(this);
     this.isMember = this.isMember.bind(this);
-    this.state = { _id: '', label: '', transactions: [], balance: {}, jars: '', compoundId: undefined };
+    this.state = { _id: '', label: '', transactions: [], balance: {}, jars: '', intendedJar: '*', compoundId: undefined, staticAccounts: {} };
+    this.refreshAccounts();
   }
 
   render() {
     const compoundApi = {
         changeFocus: this.handleFocusChange,
-        isMember: this.isMember
+        isMember: this.isMember,
+        getAccounts: this.getAccounts
     };
     console.log('Balance:', this.state.balance);
     return (
@@ -40,6 +43,25 @@ class Compound extends Component {
             <Period label="Period" compoundApi={compoundApi} />
         </div>
     );
+  }
+
+  async refreshAccounts() {
+    const self = this;
+    const accountsPromise = await REST('/api/accounts')
+    console.log('accountsPromise', accountsPromise);
+    var accountsMap = {};
+    var record;
+    var index;
+    for (index = 0; index < accountsPromise.entity.length; index++) {
+      record = accountsPromise.entity[index];
+      accountsMap[record.account] = record;
+    }
+    console.log('accountsMap', accountsMap);
+    self.setState({staticAccounts: accountsMap});
+  }
+
+  getAccounts() {
+    return this.state.staticAccounts;
   }
 
   handleLabelChange(event) {
@@ -110,7 +132,7 @@ class Compound extends Component {
             transactions.push(transaction);
             if (transactions.length === 2) {
               console.log('Add compound:', transactions)
-              const newState = this.copyState;
+              const newState = this.copyState();
               newState.transactions = transactions;
               const compoundId = await this.insertCompound(this.getRef(transactions[0]), newState);
               stateChange.compoundId = compoundId;
@@ -232,9 +254,8 @@ class Compound extends Component {
                 console.log('Compound: unlink transaction:', transactionRef.key);
                 this.unlinkTransaction(transactionRef);
             }
-        } else if (update.label || update.balance) {
-            this.saveLabel(newState);
         }
+        this.saveLabel(newState);
     } else {
         if (transactionRef) {
             if (this.contains(newState, transactionRef)) {
@@ -383,7 +404,9 @@ class Compound extends Component {
   copyState() {
     var newState = {};
     Object.keys(this.state).forEach((key) => {
-        newState[key] = this.state[key];
+        if (!key.match(/^static.*/)) {
+            newState[key] = this.state[key];
+        }
     });
     return newState;
   }

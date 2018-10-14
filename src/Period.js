@@ -7,10 +7,8 @@ class Period extends Component {
     const initialPrefix = props.prefix ? props.prefix : '';
     this.state = { label: props.label, prefix: initialPrefix, transactions: [], compoundApi: props.compoundApi };
     this.handlePrefixChange = this.handlePrefixChange.bind(this);
-    this.refreshAccounts = this.refreshAccounts.bind(this);
     this.refreshTransactions = this.refreshTransactions.bind(this);
     this.formatTransaction = this.formatTransaction.bind(this);
-    this.refreshAccounts();
     this.refreshTransactions(initialPrefix);
   }
 
@@ -56,21 +54,6 @@ class Period extends Component {
         </table>
       </div>
     );
-  }
-
-  async refreshAccounts() {
-    const self = this;
-    const accountsPromise = await REST('/api/accounts')
-    console.log('accountsPromise', accountsPromise);
-    var accountsMap = {};
-    var record;
-    var index;
-    for (index = 0; index < accountsPromise.entity.length; index++) {
-      record = accountsPromise.entity[index];
-      accountsMap[record.account] = record;
-    }
-    console.log('accountsMap', accountsMap);
-    self.setState({accounts: accountsMap});
   }
 
   async refreshTransactions(prefix) {
@@ -140,8 +123,9 @@ class Period extends Component {
 
   getDepth(account) {
     const self = this;
-    if (self.state.accounts.hasOwnProperty(account)) {
-      return self.state.accounts[account].depth;
+    const accountsMap = self.state.compoundApi.getAccounts();
+    if (accountsMap.hasOwnProperty(account)) {
+      return accountsMap[account].depth;
     } else {
       return 0;
     }
@@ -160,7 +144,7 @@ class Period extends Component {
   }
 
   formatAccount(value) {
-    var accounts = this.state.accounts;
+    var accounts = this.state.compoundApi.getAccounts();
     if (accounts.hasOwnProperty(value)) {
       return accounts[value].label;
     } else {
@@ -169,7 +153,7 @@ class Period extends Component {
   }
 
   accountJar(value) {
-    var accounts = this.state.accounts;
+    var accounts = this.state.compoundApi.getAccounts();
     if (accounts.hasOwnProperty(value)) {
       return accounts[value].key;
     } else {
@@ -178,7 +162,7 @@ class Period extends Component {
   }
 
   getJar(record) {
-    var accounts = this.state.accounts;
+    var accounts = this.state.compoundApi.getAccounts();
     var value = record.account;
     if (accounts && accounts.hasOwnProperty(value)) {
       return accounts[value].key;
