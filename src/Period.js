@@ -4,23 +4,24 @@ import REST from './rest-client';
 class Period extends Component {
   constructor(props) {
     super(props);
-    const initialPrefix = props.prefix ? props.prefix : '';
-    this.state = { label: props.label, prefix: initialPrefix, transactions: [], compoundApi: props.compoundApi };
-    this.handlePrefixChange = this.handlePrefixChange.bind(this);
-    this.refreshTransactions = this.refreshTransactions.bind(this);
+    console.log('Period props:', props);
+    this.state = { label: props.label, transactions: props.transactions, compoundApi: props.compoundApi };
     this.formatTransaction = this.formatTransaction.bind(this);
-    this.refreshTransactions(initialPrefix);
+  }
+
+  componentWillReceiveProps(newProps){
+    this.setState({
+      label: newProps.label,
+      transactions: newProps.transactions
+    });
   }
 
   render() {
+    console.log('Period render: number of transactions:', this.state.transactions.length);
     const rows = this.state.transactions.map(this.formatTransaction);
-    const prefixLabel = this.state.prefix ? this.state.prefix + '*' : '???';
     return (
       <div className="Period">
-        <h2 className="Period-title">{this.state.label} {prefixLabel}</h2>
-        <form>
-          <p><input type="text" onChange={this.handlePrefixChange}/></p>
-        </form>
+        <h2 className="Period-title">{this.state.label}</h2>
         <table>
           <colgroup>
             <col width="45px"/>
@@ -54,24 +55,6 @@ class Period extends Component {
         </table>
       </div>
     );
-  }
-
-  async refreshTransactions(prefix) {
-    const self = this;
-    if (prefix.length >= 4) {
-      const dataPromise = await REST('/api/transactions?date=/^' + prefix + '/&sort=date,number');
-      console.log('dataPromise', dataPromise);
-      dataPromise.entity.forEach(record => {
-        record.jar = self.getJar(record);
-      });
-      self.setState({transactions: dataPromise.entity});
-    }
-  }
-
-  handlePrefixChange(event) {
-    const prefix = event.target.value;
-    this.setState({ prefix: prefix });
-    this.refreshTransactions(prefix);
   }
 
   formatTransaction(record) {
@@ -158,21 +141,6 @@ class Period extends Component {
       return accounts[value].key;
     } else {
       return '*';
-    }
-  }
-
-  getJar(record) {
-    var accounts = this.state.compoundApi.getAccounts();
-    var value = record.account;
-    if (accounts && accounts.hasOwnProperty(value)) {
-      return accounts[value].key;
-    } else {
-      value = record.contraAccount;
-      if (accounts && accounts.hasOwnProperty(value)) {
-        return accounts[value].key;
-      } else {
-        return '*';
-      }
     }
   }
 }

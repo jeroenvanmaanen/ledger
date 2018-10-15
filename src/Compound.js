@@ -6,13 +6,25 @@ import Period from './Period';
 class Compound extends Component {
   constructor(props) {
     super(props);
+    this.handlePrefixChange = this.handlePrefixChange.bind(this);
     this.handleFocusChange = this.handleFocusChange.bind(this);
     this.handleLabelChange = this.handleLabelChange.bind(this);
     this.intendedJarChange = this.intendedJarChange.bind(this);
     this.getAccounts = this.getAccounts.bind(this);
     this.isMember = this.isMember.bind(this);
-    this.state = { _id: '', label: '', transactions: [], balance: {}, jars: '', intendedJar: '*', compoundId: undefined, staticAccounts: {} };
-    this.refreshAccounts();
+    this.state = {
+      _id: '',
+      label: '',
+      transactions: [],
+      balance: {},
+      jars: '',
+      intendedJar: '*',
+      compoundId: undefined,
+      staticAccounts: {},
+      staticPrefix: props.initialPrefix || '',
+      staticTransactions: []
+    };
+    this.fresh();
   }
 
   render() {
@@ -21,7 +33,10 @@ class Compound extends Component {
         isMember: this.isMember,
         getAccounts: this.getAccounts
     };
+    const prefixLabel = this.state.staticPrefix ? this.state.staticPrefix + '*' : '???';
+    const periodLabel = 'Period ' + prefixLabel;
     console.log('Balance:', this.state.balance);
+    console.log('Number of transactions', this.state.staticTransactions.length);
     return (
         <div className="CompoundContainer">
             <div className="Compound">
@@ -61,9 +76,19 @@ class Compound extends Component {
                     })}
                 </ul>
             </div>
-            <Period label="Period" compoundApi={compoundApi} />
+            <div>
+              <form>
+                <p><input type="text" onChange={this.handlePrefixChange}/></p>
+              </form>
+              <Period label={periodLabel} compoundApi={compoundApi} transactions={this.state.staticTransactions} />
+            </div>
         </div>
     );
+  }
+
+  async fresh() {
+    await this.refreshAccounts();
+    await this.refreshTransactions(this.state.staticPrefix);
   }
 
   async refreshAccounts() {
@@ -83,6 +108,39 @@ class Compound extends Component {
 
   getAccounts() {
     return this.state.staticAccounts;
+  }
+
+  async refreshTransactions(prefix) {
+    const self = this;
+    if (prefix.length >= 4) {
+      const dataPromise = await REST('/api/transactions?date=/^' + prefix + '/&sort=date,number');
+      console.log('dataPromise', dataPromise);
+      dataPromise.entity.forEach(record => {
+        record.jar = self.getJarFromRecord(record);
+      });
+      self.setState({staticTransactions: dataPromise.entity});
+    }
+  }
+
+  getJarFromRecord(record) {
+    var accounts = this.state.staticAccounts;
+    var value = record.account;
+    if (accounts && accounts.hasOwnProperty(value)) {
+      return accounts[value].key;
+    } else {
+      value = record.contraAccount;
+      if (accounts && accounts.hasOwnProperty(value)) {
+        return accounts[value].key;
+      } else {
+        return '*';
+      }
+    }
+  }
+
+  handlePrefixChange(event) {
+    const prefix = event.target.value;
+    this.setState({ staticPrefix: prefix });
+    this.refreshTransactions(prefix);
   }
 
   handleLabelChange(event) {
