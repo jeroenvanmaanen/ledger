@@ -6,6 +6,16 @@
   font-size: 1.5em;
 }
 
+.todo {
+  background: yellow;
+}
+.valid {
+  background: #33ff33;
+}
+.invalid {
+  background: #ff3333;
+}
+
 th,
 td {
     text-align: left;

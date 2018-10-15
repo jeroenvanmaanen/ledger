@@ -60,15 +60,28 @@ class Period extends Component {
   formatTransaction(record) {
     // console.log('Record:', record);
     const self = this;
-    const keys = [ 'add', 'date', 'name', 'jar', 'account', 'contraAccount', 'code', 'signedCents', 'kind', 'remarks' ]
+    const keys = [ 'add', 'date', 'name', 'intendedJar', 'account', 'contraAccount', 'code', 'signedCents', 'kind', 'remarks' ]
     const cells = keys
       .map(
         (key) => {
           var value;
+          var cssClass = 'key_'+key;
           var unformatted = undefined;
           var jar = undefined;
           if (key === 'add') {
             value = '+';
+          } else if (key === 'intendedJar') {
+            if (record.intendedJar) {
+              value = record.intendedJar;
+              if (record.intendedJar === '*' || record.balanceValid === 'yes') {
+                cssClass = cssClass + ' valid';
+              } else {
+                cssClass = cssClass + ' invalid';
+              }
+            } else {
+              value = '?';
+              cssClass = cssClass + ' todo';
+            }
           } else if (!record.hasOwnProperty(key)) {
             value = '???';
           } else if (key === 'signedCents') {
@@ -81,7 +94,6 @@ class Period extends Component {
           } else {
             value = '' + record[key];
           }
-          var cssClass = 'key_'+key;
           if (unformatted === undefined) {
             return <td class={cssClass} onClick={self.state.compoundApi.changeFocus}>{value}</td>;
           } else if (jar === undefined) {

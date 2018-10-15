@@ -152,7 +152,7 @@ class Compound extends Component {
   intendedJarChange(event) {
     const target = event.target;
     this.setState({ intendedJar: target.value });
-    this.saveState({ intendedJar: target.value });
+    this.saveState({ intendedJar: target.value, balanceValid: this.isBalanceValid(this.state.jars, target.value) });
   }
 
   findTransactionElement(event) {
@@ -230,7 +230,8 @@ class Compound extends Component {
         const label = await this.getLabel(transactionRef);
         console.log("Label:", label);
         stateChange.label = label ? label.label : '';
-        stateChange.intendedJar = '*';
+        stateChange.intendedJar = transaction.intendedJar;
+        stateChange.balanceValid = transaction.balanceValid;
         if (label && label.compoundId) {
             const result = await REST('/api/compound/' + label.compoundId);
             const compound = result.entity;
@@ -240,6 +241,7 @@ class Compound extends Component {
                 stateChange.transactions = compound.transactions;
                 stateChange.label = compound.label;
                 stateChange.intendedJar = compound.intendedJar;
+                stateChange.balanceValid = compound.balanceValid;
                 transactions = stateChange.transactions;
             }
         }
@@ -275,10 +277,20 @@ class Compound extends Component {
         jars.push(key);
     });
     newState.jars = jars;
-    this.setState({ jars: jars.join() });
-    if (toggle) {
+    const balanceValid = this.isBalanceValid(jars.join(), this.state.intendedJar);
+    const update = (this.state.balanceValid === 'yes') !== (balanceValid === 'yes');
+    console.log('Balance valid:', jars.join(), this.state.intendedJar, balanceValid, update);
+    if (update) {
+        newState.balanceValid = balanceValid;
+    }
+    this.setState({ jars: jars.join(), balanceValid: balanceValid });
+    if (toggle || update) {
         this.saveState(newState, transactionRef)
     }
+  }
+
+  isBalanceValid(jars, intendedJar) {
+    return (jars === intendedJar) ? 'yes' : 'no';
   }
 
   getField(node, key) {
@@ -343,21 +355,39 @@ class Compound extends Component {
             }
         }
         this.saveLabel(newState);
-        if (update.intendedJar || update.label) {
-            newState.transactions.forEach((transaction) => {
-                this.saveTransaction(newState, this.getRef(transaction));
-            });
-        }
+        this.updateTransactions(update, newState, !!transactionRef);
     } else {
         if (transactionRef) {
             if (this.contains(newState, transactionRef)) {
                 console.log('Compound: load:', transactionRef.key);
             } else {
                 console.log('Compound: delete:', transactionRef.key);
+                this.unlinkTransaction(transactionRef);
+                this.updateTransactions(update, newState);
             }
         } else if (newState.transactions.length === 1) {
-            this.saveLabel(newState, newState.transactions[0]._id);
+            this.saveLabel(newState, this.getRef(newState.transactions[0]));
+            this.updateTransactions(update, newState);
         }
+    }
+  }
+
+  updateTransactions(update, newState, force) {
+    if (update.intendedJar || update.balanceValid || update.label || force) {
+        newState.transactions.forEach((transaction) => {
+            console.log('Update transactions: saveTransaction:', transaction);
+            this.saveTransaction(newState, this.getRef(transaction));
+        });
+        this.state.staticTransactions.forEach((transaction) => {
+            if (this.contains(newState, this.getRef(transaction))) {
+                transaction.intendedJar = newState.intendedJar;
+                transaction.balanceValid = newState.balanceValid;
+                console.log('Updated transaction:', transaction);
+            }
+        });
+        this.setState({staticTransactions: this.state.staticTransactions});
+    } else {
+        console.log('Skipped update transactions');
     }
   }
 
@@ -377,6 +407,7 @@ class Compound extends Component {
   }
 
   async saveTransaction(newState, transactionRef) {
+    console.log('Save transaction:', transactionRef);
     const compoundId = newState.compoundId || this.state.compoundId;
     const labelId = await this.getLabelId(transactionRef);
     var newLabel = {
@@ -386,6 +417,7 @@ class Compound extends Component {
     newLabel.compoundId = compoundId;
     newLabel.label = newState.label;
     newLabel.intendedJar = newState.intendedJar;
+    newLabel.balanceValid = newState.balanceValid;
     console.log("New label:", newLabel);
     var saved = await REST({
       method: 'PUT',
@@ -398,7 +430,8 @@ class Compound extends Component {
     console.log('Saved label:', saved);
     var patch = [
       { op: 'replace', path: 'label', value: newState.label },
-      { op: 'replace', path: 'intendedJar', value: newState.intendedJar }
+      { op: 'replace', path: 'intendedJar', value: newState.intendedJar },
+      { op: 'replace', path: 'balanceValid', value: newState.balanceValid }
     ];
     await REST({
       method: 'PATCH',
@@ -416,12 +449,13 @@ class Compound extends Component {
     if (transactionRef) {
       this.saveTransaction(newState, transactionRef);
     }
-    if (compoundId) {
+    if (compoundId && newState.transactions.length > 1) {
       var compound = {};
       compound.transactions = this.summarize(newState.transactions);
       compound.balance = newState.balance;
       compound.label = newState.label;
       compound.intendedJar = newState.intendedJar;
+      compound.balanceValid = newState.balanceValid;
       const result = await REST({
         method: 'PUT',
         path: '/api/compound/' + compoundId,
@@ -519,6 +553,27 @@ class Compound extends Component {
       method: 'DELETE',
       path: '/api/label/' + labelId,
     });
+    var patch = [
+      { op: 'remove', path: 'label' },
+      { op: 'remove', path: 'intendedJar' },
+      { op: 'remove', path: 'balanceValid' }
+    ];
+    await REST({
+      method: 'PATCH',
+      path: '/api/transactions/' + transactionRef._id,
+      headers: {
+        'Content-Type': 'application/json'
+      },
+      entity: patch
+    });
+    this.state.staticTransactions.forEach((transaction) => {
+      if (transaction.key === transactionRef.key) {
+        transaction.label = '';
+        transaction.intendedJar = '';
+        transaction.balanceValid = '';
+      }
+    });
+    this.setState({staticTransactions: this.state.staticTransactions});
   }
 
   copyState() {
