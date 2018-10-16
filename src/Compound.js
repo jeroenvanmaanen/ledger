@@ -402,7 +402,7 @@ class Compound extends Component {
     const result = await REST({
       path: '/api/label?transactionKey="' + transactionRef.key + '"'
     });
-    console.log('Get label: result', result);
+    // console.log('Get label: result', result);
     const entities = result.entity
     return entities.length < 1 ? undefined : entities[0];
   }
@@ -725,6 +725,14 @@ class Compound extends Component {
       compound = compoundTransactions2[i];
       // console.log('Sanitize compound 2:', compound);
       const compoundId2 = compound.id;
+      if (compound.intendedJar && compound.balanceValid) {
+        patch = [
+          {op: 'replace', path: 'intendedJar', value: compound.intendedJar},
+          {op: 'replace', path: 'balanceValid', value: compound.balanceValid}
+        ];
+      } else {
+        patch = undefined;
+      }
       for (j = 0; j < compound.transactions.length; j++) {
         transaction = compound.transactions[j];
         // const transactionId = transaction._id;
@@ -735,6 +743,24 @@ class Compound extends Component {
           await REST({
             method: 'DELETE',
             path: '/api/compound/' + compoundId2,
+          });
+        }
+        if (patch) {
+          await REST({
+            method: 'PATCH',
+            path: '/api/label/' + label2.id,
+            headers: {
+              'Content-Type': 'application/json'
+            },
+            entity: patch
+          });
+          await REST({
+            method: 'PATCH',
+            path: '/api/transactions/' + transaction._id,
+            headers: {
+              'Content-Type': 'application/json'
+            },
+            entity: patch
           });
         }
       }
@@ -792,9 +818,68 @@ class Compound extends Component {
           });
         }
       } else {
+        if (!label3.compoundId && label3.intendedJar) {
+          const transaction3result = await REST('/api/transactions/' + label3.transactionId);
+          const transaction3 = transaction3result.entity;
+          const jar1 = this.getAccountKey(transaction3.account);
+          const jar2 = this.getAccountKey(transaction3.contraAccount);
+          const balanceValidFlag = (jar1 === label3.intendedJar && !jar2) || (jar2 === label3.intendedJar && !jar1);
+          const balanceValid3 = balanceValidFlag ? "yes" : "no";
+          patch = [
+            {op: 'replace', path: 'intendedJar', value: label3.intendedJar},
+            {op: 'replace', path: 'balanceValid', value: balanceValid3}
+          ];
+          if (balanceValid3 !== label3.balanceValid || balanceValid3 !== transaction3.balanceValid) {
+            console.log('Patch validity of transaction:', transaction3, label3, patch);
+          }
+          await REST({
+            method: 'PATCH',
+            path: '/api/label/' + label3.id,
+            headers: {
+              'Content-Type': 'application/json'
+            },
+            entity: patch
+          });
+          await REST({
+            method: 'PATCH',
+            path: '/api/transactions/' + transaction._id,
+            headers: {
+              'Content-Type': 'application/json'
+            },
+            entity: patch
+          });
+        }
+        allTransactions[label3.transactionKey] = undefined;
         previousLabel = label3;
       }
     }
+
+    patch = [
+      {op: 'remove', path: 'intendedJar'},
+      {op: 'remove', path: 'balanceValid'}
+    ];
+    const transactionKeys = Object.keys(allTransactions);
+    for (i = 0; i < transactionKeys.length; i++) {
+      const key = transactionKeys[i];
+      const transactionId = allTransactions[key];
+      if (transactionId) {
+        await REST({
+          method: 'PATCH',
+          path: '/api/transactions/' + transactionId,
+          headers: {
+            'Content-Type': 'application/json'
+          },
+          entity: patch
+        });
+      }
+    }
+
+    await this.fresh();
+  }
+
+  getAccountKey(accountNumber) {
+    const account = this.state.staticAccounts[accountNumber];
+    return account && account.key;
   }
 }
 
