@@ -1,5 +1,4 @@
 import React, { Component } from 'react';
-import REST from './rest-client';
 
 class Period extends Component {
   constructor(props) {

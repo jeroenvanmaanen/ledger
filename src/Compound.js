@@ -1,6 +1,5 @@
 import React, { Component } from 'react';
 import REST from './rest-client';
-import UUID from 'uuid-js';
 import Period from './Period';
 
 class Compound extends Component {
@@ -12,6 +11,7 @@ class Compound extends Component {
     this.intendedJarChange = this.intendedJarChange.bind(this);
     this.getAccounts = this.getAccounts.bind(this);
     this.isMember = this.isMember.bind(this);
+    this.sanitize = this.sanitize.bind(this);
     this.state = {
       _id: '',
       label: '',
@@ -79,6 +79,7 @@ class Compound extends Component {
             <div>
               <form>
                 <p><input type="text" onChange={this.handlePrefixChange}/></p>
+                <p><input type="button" value="sanitize" onClick={this.sanitize}/></p>
               </form>
               <Period label={periodLabel} compoundApi={compoundApi} transactions={this.state.staticTransactions} />
             </div>
@@ -584,6 +585,216 @@ class Compound extends Component {
         }
     });
     return newState;
+  }
+
+  async sanitize() {
+    console.log('Sanitize');
+
+    const sourceTransactionsResponse = await REST({
+      method: 'GET',
+      path: '/api/transactions'
+    });
+    if (sourceTransactionsResponse.status.code !== 200) {
+      console.log('Getting source transactions failed', sourceTransactionsResponse);
+      return;
+    }
+    const sourceTransactions = sourceTransactionsResponse.entity;
+    var allTransactions = {};
+    sourceTransactions.forEach((transaction) => {
+      allTransactions[transaction.key] = transaction.id;
+    })
+
+    const compoundTransactionsResponse = await REST({
+      method: 'GET',
+      path: '/api/compound'
+    });
+    if (compoundTransactionsResponse.status.code !== 200) {
+      console.log('Getting compound transactions failed', compoundTransactionsResponse);
+      return;
+    }
+    const compoundTransactions = compoundTransactionsResponse.entity;
+    var i;
+    var j;
+    var compound;
+    var transaction;
+    var patch;
+    var changed;
+    for (i = 0; i < compoundTransactions.length; i++) {
+      compound = compoundTransactions[i];
+      // console.log('Sanitize compound:', compound);
+      const compoundId = compound.id;
+      if (compound.transactions.length <= 1) {
+      console.log('Deleting trivial compound:', compoundId);
+        await REST({
+          method: 'DELETE',
+          path: '/api/compound/' + compoundId,
+        });
+        continue;
+      }
+      changed = false;
+      for (j = 0; j < compound.transactions.length; j++) {
+        transaction = compound.transactions[j];
+        const transactionId = allTransactions[transaction.key];
+        if (transactionId !== transaction._id) {
+          transaction._id = transactionId;
+          changed = true;
+        }
+        // console.log('Sanitize transaction:', transactionId, transaction);
+        patch = [
+          { op: 'replace', path: 'label', value: compound.label },
+          { op: 'replace', path: 'intendedJar', value: compound.intendedJar },
+          { op: 'replace', path: 'balanceValid', value: compound.balanceValid }
+        ];
+        // console.log('Patching transaction:', patch);
+        if (transactionId) {
+          await REST({
+            method: 'PATCH',
+            path: '/api/transactions/' + transactionId,
+            headers: {
+              'Content-Type': 'application/json'
+            },
+            entity: patch
+          });
+        } else {
+          console.log('Error patching transaction (id unknown):', patch)
+        }
+        const label = await this.getLabel(this.getRef(transaction));
+        if (label) {
+          // console.log('Patching label:', label);
+          patch.push({op: 'replace', path: 'compoundId', value: compound.id});
+          patch.push({op: 'replace', path: 'transactionId', value: transactionId});
+          // console.log('Patching label:', patch);
+          if (label.id) {
+            await REST({
+              method: 'PATCH',
+              path: '/api/label/' + label.id,
+              headers: {
+                'Content-Type': 'application/json'
+              },
+              entity: patch
+            });
+          } else {
+            console.log('Error patching label (id unknown):', patch, label)
+          }
+        } else {
+          const newLabel = {
+            transactionId: transactionId,
+            transactionKey: transaction.key,
+            label: compound.label,
+            intendedJar: compound.intendedJar,
+            balanceValid: compound.balanceValid,
+            compoundId: compound._id
+          };
+          console.log('Creating label:', newLabel);
+          await REST({
+            method: 'PUT',
+            path: '/api/label',
+            headers: {
+              'Content-Type': 'application/json'
+            },
+            entity: newLabel
+          });
+        }
+      }
+      if (changed) {
+        patch = [
+          { op: 'replace', path: 'transactions', value: compound.transactions }
+        ];
+        console.log('Patching compound transactions:', compound.id, patch);
+        await REST({
+          method: 'PATCH',
+          path: '/api/compound/' + compound.id,
+          headers: {
+            'Content-Type': 'application/json'
+          },
+          entity: patch
+        });
+      }
+    }
+
+    const compoundTransactionsResponse2 = await REST({
+      method: 'GET',
+      path: '/api/compound'
+    });
+    if (compoundTransactionsResponse2.status.code !== 200) {
+      console.log('Getting compound transactions 2 failed', compoundTransactionsResponse2);
+      return;
+    }
+    const compoundTransactions2 = compoundTransactionsResponse2.entity;
+    for (i = 0; i < compoundTransactions2.length; i++) {
+      compound = compoundTransactions2[i];
+      // console.log('Sanitize compound 2:', compound);
+      const compoundId2 = compound.id;
+      for (j = 0; j < compound.transactions.length; j++) {
+        transaction = compound.transactions[j];
+        // const transactionId = transaction._id;
+        // console.log('Sanitize transaction 2:', transactionId, transaction);
+        const label2 = await this.getLabel(this.getRef(transaction));
+        if (label2 && label2.compoundId !== compoundId2) {
+          console.log('Deleting overlapping compound transaction:', compound, compoundId2)
+          await REST({
+            method: 'DELETE',
+            path: '/api/compound/' + compoundId2,
+          });
+        }
+      }
+    }
+
+    const labelsResponse = await REST({
+      method: 'GET',
+      path: '/api/label?sort=transactionKey'
+    });
+    if (labelsResponse.status.code !== 200) {
+      console.log('Getting labels failed', labelsResponse);
+      return;
+    }
+    const labels = labelsResponse.entity;
+    var label3;
+    var previousLabel = {};
+    for (i = 0; i < labels.length; i++) {
+      label3 = labels[i];
+      // console.log('Sanitize label 3:', label3);
+      if (label3.transactionKey === previousLabel.transactionKey) {
+        if (label3.compoundId) {
+          var found3 = false;
+          const compound3result = await REST('/api/compound/' + label3.compoundId);
+          if (compound3result.status.code === 200) {
+            const compound3 = compound3result.entity;
+            found3 = this.contains(compound3, {key:label3.transactionKey});
+          }
+          if (!found3) {
+            const patchLabel3 = [
+              { op: 'remove', path: 'compoundId' },
+            ];
+            console.log('Removing label from compound transaction:', label3.id, patchLabel3);
+            await REST({
+              method: 'PATCH',
+              path: '/api/label/' + label3.id,
+              headers: {
+                'Content-Type': 'application/json'
+              },
+              entity: patchLabel3
+            });
+          }
+        }
+        if (label3.compoundId) {
+          console.log('Delete duplicate label', label3.transactionKey, previousLabel);
+          await REST({
+            method: 'DELETE',
+            path: '/api/label/' + previousLabel.id,
+          });
+          previousLabel = label3;
+        } else {
+          console.log('Delete duplicate label', previousLabel.transactionKey, label3);
+          await REST({
+            method: 'DELETE',
+            path: '/api/label/' + label3.id,
+          });
+        }
+      } else {
+        previousLabel = label3;
+      }
+    }
   }
 }
 
