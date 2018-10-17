@@ -9,6 +9,8 @@ class Compound extends Component {
     this.handleFocusChange = this.handleFocusChange.bind(this);
     this.handleLabelChange = this.handleLabelChange.bind(this);
     this.intendedJarChange = this.intendedJarChange.bind(this);
+    this.changeIntendedJar = this.changeIntendedJar.bind(this);
+    this.handleJarChangeFunction = this.handleJarChangeFunction.bind(this);
     this.getAccounts = this.getAccounts.bind(this);
     this.isMember = this.isMember.bind(this);
     this.sanitize = this.sanitize.bind(this);
@@ -41,25 +43,48 @@ class Compound extends Component {
         <div className="CompoundContainer">
             <div className="Compound">
                 <h2>Compound [{this.state.jars}]</h2>
-                <p>Intended jar:
-                  <select onChange={this.intendedJarChange}>
-                    {Object.keys(this.state.staticAccounts)
-                      .map(
-                        (accountNr) => {
+                <p><span>Intended jar:</span>
+                  <div class='compoundJars'>
+                    <div class='affected'>
+                      {Object.keys(this.state.staticAccounts)
+                        .map((accountNr) => {
                           const account = this.state.staticAccounts[accountNr];
-                          if (account.key === this.state.intendedJar) {
-                            return (<option value={account.key} selected='selected'>{account.label}</option>)
+                          if (this.state.balance[account.key]) {
+                            var cssClass = 'compoundJar';
+                            var handler = this.handleJarChangeFunction(account.key);
+                            if (account.key === this.state.intendedJar) {
+                              cssClass = cssClass + ' intended';
+                              handler = this.handleJarChangeFunction('?');
+                              if (this.state.balanceValid === 'yes') {
+                                cssClass = cssClass + ' valid';
+                              }
+                            }
+                            return (<div class={cssClass} onClick={handler}>{account.key}</div>)
                           } else {
-                            return (<option value={account.key}>{account.label}</option>)
+                            return null;
                           }
-                        }
-                      )
-                    }
-                    {this.state.intendedJar === '*'
-                      ? (<option value='*' selected='selected'>-- any --</option>)
-                      : (<option value='*'>-- any --</option>)
-                    }
-                  </select>
+                        })
+                      }
+                    </div>
+                    <div class='unaffected'>
+                      <div class='expandHandle'>&gt;</div>
+                      {Object.keys(this.state.staticAccounts)
+                        .map((accountNr) => {
+                          const account = this.state.staticAccounts[accountNr];
+                          if (!this.state.balance[account.key]) {
+                            var cssClass = 'compoundJar';
+                            var handler = this.handleJarChangeFunction(account.key);
+                            if (account.key === this.state.intendedJar) {
+                              cssClass = cssClass + ' intended';
+                            }
+                            return (<div class={cssClass} onClick={handler}>{account.key}</div>)
+                          } else {
+                            return null;
+                          }
+                        })
+                      }
+                    </div>
+                  </div>
                 </p>
                 <p>Label:</p>
                 <p><input type="text" name="label" className="compoundInput" value={this.state.label} onChange={this.handleLabelChange} /></p>
@@ -85,6 +110,12 @@ class Compound extends Component {
             </div>
         </div>
     );
+  }
+
+  handleJarChangeFunction(intendedJar) {
+    return () => {
+      this.changeIntendedJar(intendedJar);
+    };
   }
 
   async fresh() {
@@ -152,8 +183,12 @@ class Compound extends Component {
 
   intendedJarChange(event) {
     const target = event.target;
-    this.setState({ intendedJar: target.value });
-    this.saveState({ intendedJar: target.value, balanceValid: this.isBalanceValid(this.state.jars, target.value) });
+    this.changeIntendedJar(target.value);
+  }
+
+  changeIntendedJar(intendedJar) {
+    this.setState({ intendedJar: intendedJar });
+    this.saveState({ intendedJar: intendedJar, balanceValid: this.isBalanceValid(this.state.jars, intendedJar) });
   }
 
   findTransactionElement(event) {
@@ -231,6 +266,7 @@ class Compound extends Component {
         const label = await this.getLabel(transactionRef);
         console.log("Label:", label);
         stateChange.label = label ? label.label : '';
+        stateChange.compoundId = '';
         stateChange.intendedJar = transaction.intendedJar;
         stateChange.balanceValid = transaction.balanceValid;
         if (label && label.compoundId) {

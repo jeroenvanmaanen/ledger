@@ -47,3 +47,18 @@ td {
 .hidden {
     display: none;
 }
+
+.compoundJars,
+.compoundJars div {
+    display: inline-block;
+}
+.compoundJars > div > div {
+    padding: 3px;
+}
+.compoundJars > .unaffected > div.compoundJar {
+    display: none;
+    color: #ccc;
+}
+.compoundJars:hover > .unaffected > div.compoundJar {
+    display: inline-block;
+}
