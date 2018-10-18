@@ -1,11 +1,13 @@
 import React, { Component } from 'react';
 import REST from './rest-client';
 import Period from './Period';
+import Export from './Export';
 
 class Compound extends Component {
   constructor(props) {
     super(props);
     this.handlePrefixChange = this.handlePrefixChange.bind(this);
+    this.handleExportChange = this.handleExportChange.bind(this);
     this.handleFocusChange = this.handleFocusChange.bind(this);
     this.handleLabelChange = this.handleLabelChange.bind(this);
     this.intendedJarChange = this.intendedJarChange.bind(this);
@@ -24,7 +26,8 @@ class Compound extends Component {
       compoundId: undefined,
       staticAccounts: {},
       staticPrefix: props.initialPrefix || '',
-      staticTransactions: []
+      staticTransactions: [],
+      staticExport: false
     };
     this.fresh();
   }
@@ -105,12 +108,21 @@ class Compound extends Component {
             <div>
               <form>
                 <p><input type="text" onChange={this.handlePrefixChange}/></p>
-                <p><input type="button" value="sanitize" onClick={this.sanitize}/></p>
+                <p><input type="button" value="sanitize" onClick={this.sanitize}/> &#xA0; Show export <input type="checkbox" checked={this.state.staticExport} onClick={this.handleExportChange}/></p>
               </form>
-              <Period label={periodLabel} compoundApi={compoundApi} transactions={this.state.staticTransactions} />
+              {this.state.staticExport
+                ? (<Export label={periodLabel} compoundApi={compoundApi} transactions={this.state.staticTransactions} />)
+                : (<Period label={periodLabel} compoundApi={compoundApi} transactions={this.state.staticTransactions} />)
+              }
             </div>
         </div>
     );
+  }
+
+  handleExportChange(event) {
+    const target = event.target;
+    console.log('Handle export change:', target, target.checked);
+    this.setState({staticExport: target.checked});
   }
 
   handleJarChangeFunction(intendedJar) {
