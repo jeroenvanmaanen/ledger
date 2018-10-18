@@ -57,7 +57,7 @@ td {
 }
 .compoundJars > .unaffected > div.compoundJar {
     display: none;
-    color: #ccc;
+    color: #c80;
 }
 .compoundJars:hover > .unaffected > div.compoundJar {
     display: inline-block;

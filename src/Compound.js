@@ -83,6 +83,7 @@ class Compound extends Component {
                           }
                         })
                       }
+                      <div class='compoundJar' onClick={this.handleJarChangeFunction(this.state.intendedJar === '*' ? '?' : '*')}>*</div>
                     </div>
                   </div>
                 </p>
@@ -194,16 +195,23 @@ class Compound extends Component {
   findTransactionElement(event) {
     var target = event.target;
     var toggle = false;
+    var jar = undefined;
+    var j;
     while (!this.hasClass(target, 'transaction') && target.parentNode && target.tagName !== 'TABLE') {
         console.log('Handle focus change: target parent:', target, target.tagName, target.className, target.parentNode);
         if (target.className === 'key_add') {
             toggle = true;
         }
+        j = target.getAttribute('jar');
+        if (j) {
+          jar = j;
+        }
         target = target.parentNode;
     }
     return {
       target: target,
-      toggle: toggle
+      toggle: toggle,
+      jar: jar
     }
   }
 
@@ -211,9 +219,15 @@ class Compound extends Component {
     const transactionElement = this.findTransactionElement(event);
     const target = transactionElement.target;
     const toggle = transactionElement.toggle;
+    const jar = transactionElement.jar;
     console.log('Handle focus change: target:', target, target.tagName, target.className, target.parentNode);
     if (this.hasClass(target, 'transaction') && target.getAttribute('data-id')) {
-        this.updateState(target, toggle);
+        const sameCompound = this.contains(this.state, {key:target.getAttribute('data-key')});
+        if (sameCompound && jar && jar !== this.state.intendedJar) {
+          this.changeIntendedJar(jar)
+        } else {
+          this.updateState(target, toggle);
+        }
     }
   }
 
