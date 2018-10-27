@@ -21,9 +21,11 @@ class Compound extends Component {
       label: '',
       transactions: [],
       balance: {},
+      balanceValid: '',
       jars: '',
       intendedJar: '*',
       compoundId: undefined,
+      compoundRef: '',
       staticAccounts: {},
       staticPrefix: props.initialPrefix || '',
       staticTransactions: [],
@@ -293,6 +295,7 @@ class Compound extends Component {
         console.log("Label:", label);
         stateChange.label = label ? label.label : '';
         stateChange.compoundId = '';
+        stateChange.compoundRef = '';
         stateChange.intendedJar = transaction.intendedJar;
         stateChange.balanceValid = transaction.balanceValid;
         if (label && label.compoundId) {
@@ -302,6 +305,7 @@ class Compound extends Component {
                 console.log('Retrieved compound transaction:', compound);
                 stateChange.compoundId = label.compoundId;
                 stateChange.transactions = compound.transactions;
+                stateChange.compoundRef = this.getCompoundRef(compound);
                 stateChange.label = compound.label;
                 stateChange.intendedJar = compound.intendedJar;
                 stateChange.balanceValid = compound.balanceValid;
@@ -346,7 +350,8 @@ class Compound extends Component {
     if (update) {
         newState.balanceValid = balanceValid;
     }
-    this.setState({ jars: jars.join(), balanceValid: balanceValid });
+    newState.compoundRef = this.getCompoundRef(newState);
+    this.setState({ jars: jars.join(), balanceValid: balanceValid, compoundRef: newState.compoundRef });
     if (toggle || update) {
         this.saveState(newState, transactionRef)
     }
@@ -445,6 +450,7 @@ class Compound extends Component {
             if (this.contains(newState, this.getRef(transaction))) {
                 transaction.intendedJar = newState.intendedJar;
                 transaction.balanceValid = newState.balanceValid;
+                transaction.compoundRef = newState.compoundRef;
                 console.log('Updated transaction:', transaction);
             }
         });
@@ -481,6 +487,7 @@ class Compound extends Component {
     newLabel.label = newState.label;
     newLabel.intendedJar = newState.intendedJar;
     newLabel.balanceValid = newState.balanceValid;
+    newLabel.compoundRef = newState.compoundRef;
     console.log("New label:", newLabel);
     var saved = await REST({
       method: 'PUT',
@@ -494,7 +501,8 @@ class Compound extends Component {
     var patch = [
       { op: 'replace', path: 'label', value: newState.label },
       { op: 'replace', path: 'intendedJar', value: newState.intendedJar },
-      { op: 'replace', path: 'balanceValid', value: newState.balanceValid }
+      { op: 'replace', path: 'balanceValid', value: newState.balanceValid },
+      { op: 'replace', path: 'compoundRef', value: newState.compoundRef }
     ];
     await REST({
       method: 'PATCH',
@@ -514,6 +522,7 @@ class Compound extends Component {
     }
     if (compoundId && newState.transactions.length > 1) {
       var compound = {};
+      compound.compoundRef = newState.compoundRef;
       compound.transactions = this.summarize(newState.transactions);
       compound.balance = newState.balance;
       compound.label = newState.label;
@@ -537,11 +546,37 @@ class Compound extends Component {
     }
   }
 
+  getCompoundRef(compound) {
+    const external = compound.transactions.filter((transaction) => transaction.contraJar === '*');
+    var candidateRef = this.getRef(external[0]);
+    external.forEach((transaction) => {
+      const transactionRef = this.getRef(transaction);
+      if (this.compareRefs(transactionRef, candidateRef) < 0) {
+        candidateRef = transactionRef;
+      }
+    });
+    return candidateRef.key;
+  }
+
   getRef(transaction) {
+    const key = transaction.key;
+    const pair = key.split('_');
     return {
       _id: transaction._id,
-      key: transaction.key
+      key: transaction.key,
+      date: pair[0],
+      nr: parseInt(pair[1])
     };
+  }
+
+  compareRefs(left, right) {
+    if (left.date < right.date) {
+      return -1;
+    } else if (left.date > right.date) {
+      return 1;
+    } else {
+      return Math.sign(left.nr - right.nr);
+    }
   }
 
   summarize(transactions) {
@@ -619,7 +654,8 @@ class Compound extends Component {
     var patch = [
       { op: 'remove', path: 'label' },
       { op: 'remove', path: 'intendedJar' },
-      { op: 'remove', path: 'balanceValid' }
+      { op: 'remove', path: 'balanceValid' },
+      { op: 'remove', path: 'compoundRef' }
     ];
     await REST({
       method: 'PATCH',
@@ -634,6 +670,7 @@ class Compound extends Component {
         transaction.label = '';
         transaction.intendedJar = '';
         transaction.balanceValid = '';
+        transaction.compoundRef = '';
       }
     });
     this.setState({staticTransactions: this.state.staticTransactions});
@@ -693,6 +730,19 @@ class Compound extends Component {
         });
         continue;
       }
+      const compoundRef = this.getCompoundRef(compound);
+      if (compoundRef !== compound.compoundRef) {
+        await REST({
+          method: 'PATCH',
+          path: '/api/compound/' + compoundId,
+          headers: {
+            'Content-Type': 'application/json'
+          },
+          entity: [
+            { op: 'replace', path: 'compoundRef', value: compound.compoundRef }
+          ]
+        });
+      }
       changed = false;
       for (j = 0; j < compound.transactions.length; j++) {
         transaction = compound.transactions[j];
@@ -705,7 +755,8 @@ class Compound extends Component {
         patch = [
           { op: 'replace', path: 'label', value: compound.label },
           { op: 'replace', path: 'intendedJar', value: compound.intendedJar },
-          { op: 'replace', path: 'balanceValid', value: compound.balanceValid }
+          { op: 'replace', path: 'balanceValid', value: compound.balanceValid },
+          { op: 'replace', path: 'compoundRef', value: compound.compoundRef }
         ];
         // console.log('Patching transaction:', patch);
         if (transactionId) {
@@ -724,6 +775,7 @@ class Compound extends Component {
         if (label) {
           // console.log('Patching label:', label);
           patch.push({op: 'replace', path: 'compoundId', value: compound.id});
+          patch.push({op: 'replace', path: 'compoundRef', value: compound.compoundRef});
           patch.push({op: 'replace', path: 'transactionId', value: transactionId});
           // console.log('Patching label:', patch);
           if (label.id) {
@@ -745,7 +797,8 @@ class Compound extends Component {
             label: compound.label,
             intendedJar: compound.intendedJar,
             balanceValid: compound.balanceValid,
-            compoundId: compound._id
+            compoundId: compound._id,
+            compoundRef: compound.compoundRef
           };
           console.log('Creating label:', newLabel);
           await REST({
