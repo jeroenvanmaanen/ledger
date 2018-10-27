@@ -40,4 +40,4 @@ else
 fi
 
 set -x
-docker run "${VOLUMES[@]}" --link ledger_rest --rm tutum/curl /bin/bash -c "'${BIN}/import-triodos-and-ing.sh' ${FLAGS_INHERIT[@]} '${FILE}'"
+docker run "${VOLUMES[@]}" --link ledger_rest --rm tutum/curl /bin/bash -c "'${BIN}/import-triodos-and-ing.sh' ${FLAGS_INHERIT[@]} -r 'ledger_rest:3000' '${FILE}'"
