@@ -13,6 +13,7 @@ class Compound extends Component {
     this.intendedJarChange = this.intendedJarChange.bind(this);
     this.changeIntendedJar = this.changeIntendedJar.bind(this);
     this.handleJarChangeFunction = this.handleJarChangeFunction.bind(this);
+    this.handleContentToggle = this.handleContentToggle.bind(this);
     this.getAccounts = this.getAccounts.bind(this);
     this.isMember = this.isMember.bind(this);
     this.sanitize = this.sanitize.bind(this);
@@ -47,6 +48,7 @@ class Compound extends Component {
     return (
         <div className="CompoundContainer">
             <div className="Compound">
+              <div class="content">
                 <h2>Compound [{this.state.jars}]</h2>
                 <p><span>Intended jar:</span>
                   <div class='compoundJars'>
@@ -100,12 +102,19 @@ class Compound extends Component {
                         return (<li>{jar}: {this.state.balance[jar]}</li>);
                     })}
                 </ul>
-                <p>Transactions:</p>
-                <ul>
-                    {this.state.transactions.map((transaction) => {
-                        return (<li>{transaction._id}: {transaction.amount} {transaction.jar} {transaction.contraJar}</li>);
-                    })}
-                </ul>
+                <div>
+                  <div class="content">
+                    <p>Transactions:</p>
+                    <ul>
+                        {this.state.transactions.map((transaction) => {
+                            return (<li>{transaction._id}: {transaction.amount} {transaction.jar} {transaction.contraJar}</li>);
+                        })}
+                    </ul>
+                  </div>
+                  <div class="toggle" onClick={this.handleContentToggle}>^</div>
+                </div>
+              </div>
+              <div class="toggle" onClick={this.handleContentToggle}>^</div>
             </div>
             <div>
               <form>
@@ -119,6 +128,24 @@ class Compound extends Component {
             </div>
         </div>
     );
+  }
+
+  handleContentToggle(event) {
+    const target = event.target;
+    console.log('Handle content toggle: target:', target);
+    const parent = target.parentNode;
+    console.log('Handle content toggle: parent:', parent);
+    parent.childNodes.forEach((child) => {
+      var childClass = ' ' + (child.getAttribute('class') || '') + ' ';
+      if (childClass.match(/ content /)) {
+        if (childClass.match(/ hidden /)) {
+          childClass = childClass.replace(/ hidden /g, ' ');
+        } else {
+          childClass = childClass + 'hidden ';
+        }
+        child.setAttribute('class', childClass.trim());
+      }
+    });
   }
 
   handleExportChange(event) {
@@ -548,14 +575,18 @@ class Compound extends Component {
 
   getCompoundRef(compound) {
     const external = compound.transactions.filter((transaction) => transaction.contraJar === '*');
-    var candidateRef = this.getRef(external[0]);
-    external.forEach((transaction) => {
-      const transactionRef = this.getRef(transaction);
-      if (this.compareRefs(transactionRef, candidateRef) < 0) {
-        candidateRef = transactionRef;
-      }
-    });
-    return candidateRef.key;
+    if (external[0]) {
+      var candidateRef = this.getRef(external[0]);
+      external.forEach((transaction) => {
+        const transactionRef = this.getRef(transaction);
+        if (this.compareRefs(transactionRef, candidateRef) < 0) {
+          candidateRef = transactionRef;
+        }
+      });
+      return candidateRef.key;
+    } else {
+      return '';
+    }
   }
 
   getRef(transaction) {
@@ -565,7 +596,7 @@ class Compound extends Component {
       _id: transaction._id,
       key: transaction.key,
       date: pair[0],
-      nr: parseInt(pair[1])
+      nr: parseInt(pair[1], 10)
     };
   }
 
@@ -934,8 +965,8 @@ class Compound extends Component {
         }
       } else {
         if (!label3.compoundId && label3.intendedJar) {
-          const transaction3result = await REST('/api/transactions/' + label3.transactionId);
-          const transaction3 = transaction3result.entity;
+          const transaction3result = await REST('/api/transactions?key=' + label3.transactionKey);
+          const transaction3 = transaction3result.entity[0];
           const jar1 = this.getAccountKey(transaction3.account);
           const jar2 = this.getAccountKey(transaction3.contraAccount);
           const balanceValidFlag = (jar1 === label3.intendedJar && !jar2) || (jar2 === label3.intendedJar && !jar1);
@@ -946,23 +977,27 @@ class Compound extends Component {
           ];
           if (balanceValid3 !== label3.balanceValid || balanceValid3 !== transaction3.balanceValid) {
             console.log('Patch validity of transaction:', transaction3, label3, patch);
+            await REST({
+              method: 'PATCH',
+              path: '/api/transactions/' + transaction3.id,
+              headers: {
+                'Content-Type': 'application/json'
+              },
+              entity: patch
+            });
           }
-          await REST({
-            method: 'PATCH',
-            path: '/api/label/' + label3.id,
-            headers: {
-              'Content-Type': 'application/json'
-            },
-            entity: patch
-          });
-          await REST({
-            method: 'PATCH',
-            path: '/api/transactions/' + transaction._id,
-            headers: {
-              'Content-Type': 'application/json'
-            },
-            entity: patch
-          });
+          if (transaction3.id !== label3.transactionId) {
+            console.log('Patch transaction ID in label:', transaction3, label3, patch);
+            patch.push({op: 'replace', path: 'transactionId', value: transaction3.id});
+            await REST({
+              method: 'PATCH',
+              path: '/api/label/' + label3.id,
+              headers: {
+                'Content-Type': 'application/json'
+              },
+              entity: patch
+            });
+          }
         }
         allTransactions[label3.transactionKey] = undefined;
         previousLabel = label3;
